@@ -9,23 +9,34 @@ import time
 import colorsys
 
 import torch
+import torch_directml
+
 import numpy as np
 from mss import mss
-import matplotlib.pyplot as plt
 import cv2
 from torchvision import datasets, models, transforms
 
-def draw_box(img, label, x1, y1, x2, y2, color, thickness = 1, text_color = [230, 230, 230]):
-    img = cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness=thickness)
+def draw_box(img, label, x1, y1, x2, y2, color, thickness=1, text_color=(230, 230, 230)):
+    color_bgr = (int(color[2] * 255), int(color[1] * 255), int(color[0] * 255))
+    img = cv2.rectangle(img, (x1, y1), (x2, y2), color_bgr, thickness=thickness)
 
-    label_box_thickness = thickness / 3.0
-    text_size = cv2.getTextSize(label, 0, fontScale=label_box_thickness, thickness=thickness)[0]
+    label_box_thickness = max(1, int(thickness / 3.0))
+    text_size = cv2.getTextSize(label, 0, fontScale=label_box_thickness / 2, thickness=thickness)[0]
 
     offset = 3
 
     label_box_point = (x1 + text_size[0], y1 - text_size[1] - offset)
-    img = cv2.rectangle(img, (x1, y1), label_box_point, color, thickness=-1)
-    img = cv2.putText(img, label, (x1, y1 - offset), cv2.FONT_HERSHEY_SIMPLEX, label_box_thickness, text_color, thickness=thickness, lineType=cv2.LINE_AA)
+    img = cv2.rectangle(img, (x1, y1), label_box_point, color_bgr, thickness=-1)
+    img = cv2.putText(
+        img,
+        label,
+        (x1, y1 - offset),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        label_box_thickness / 2,
+        text_color,
+        thickness=thickness,
+        lineType=cv2.LINE_AA,
+    )
     return img
 
 score_threshold = 0.6
@@ -36,128 +47,148 @@ def main():
     parser.add_argument('num_classes', type=int, help='number of classes (149)', default=149)
 
     args = parser.parse_args()
-
     model_path = args.model_path
     num_classes = args.num_classes
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    # ---- DirectML device ----
+    device = torch_directml.device(1)
+    print("Using DirectML device:", device)
 
+    # ---- Model ----
     model = create_model(num_classes, device)
-    model.load_state_dict(torch.load(model_path))
+    state = torch.load(model_path, map_location="cpu", weights_only=False)
+    model.load_state_dict(state)
+    model.to(device)
     model.eval()
 
+    print("Using full precision (FP32) - DirectML doesn't support FP16 for NMS")
+
     icons_path = 'league_icons/'
-    image_drawer = ImageDrawer(icons_path + 'champions', icons_path + 'minimap', icons_path + 'fog',
-                               icons_path + 'misc', resize=(256, 256))
+    image_drawer = ImageDrawer(
+        icons_path + 'champions',
+        icons_path + 'minimap',
+        icons_path + 'fog',
+        icons_path + 'misc',
+        resize=(256, 256),
+    )
 
-    champion_to_color = {k: colorsys.hsv_to_rgb(v / num_classes, 1.0, 1.0) for k, v in image_drawer.champion_to_id.items()}
+    champion_to_color = {
+        k: colorsys.hsv_to_rgb(v / num_classes, 1.0, 1.0)
+        for k, v in image_drawer.champion_to_id.items()
+    }
 
-    fig = plt.figure(figsize=(25, 25))
-    ax1 = fig.add_subplot(2, 2, 1)
-    ax2 = fig.add_subplot(2, 2, 2)
-    plt.ion()
+    # Cache minimap crop coordinates
+    minimap_crop = None
+    
+    # Frame skip for performance (process every Nth frame)
+    frame_skip = 1  # Set to 2 or 3 to skip frames if still slow
+    frame_count = 0
+
+    print("Starting detection... Press 'q' to quit")
 
     while True:
+        frame_count += 1
+        if frame_count % frame_skip != 0:
+            continue
+
         screenshot = capture_screenshot()
         h, w, c = screenshot.shape
+
         minimap_ratio = 800 / 1080
         minimap_x = int(minimap_ratio * h)
-
         minimap_size = h - minimap_x
+
         minimap = screenshot[-minimap_size:, -minimap_size:]
 
-        h, w, c = minimap.shape
-        left = 0
-        right = 0
-        top = 0
-        bottom = 0
+        # Use cached crop if available, otherwise detect borders
+        if minimap_crop is None:
+            h, w, c = minimap.shape
+            left = right = top = bottom = 0
 
-        for x in range(w):
-            y = int(h / 2)
-            r, g, b = minimap[y][x]
-            if r == 0 and g == 0 and b == 0:
-                left = x
-                break
+            for x in range(w):
+                y = int(h / 2)
+                r, g, b = minimap[y][x]
+                if r < 10 and g < 10 and b < 10:
+                    left = x
+                    break
 
-        for x in range(w - 1, 0, -1):
-            y = int(h / 2)
-            r, g, b = minimap[y][x]
-            if r == 0 and g == 0 and b == 0:
-                right = x
-                break
+            for x in range(w - 1, 0, -1):
+                y = int(h / 2)
+                r, g, b = minimap[y][x]
+                if r < 10 and g < 10 and b < 10:
+                    right = x
+                    break
 
-        for y in range(h):
-            x = int(w / 2)
-            r, g, b = minimap[y][x]
-            if r == 0 and g == 0 and b == 0:
-                top = y
-                break
+            for y in range(h):
+                x = int(w / 2)
+                r, g, b = minimap[y][x]
+                if r < 10 and g < 10 and b < 10:
+                    top = y
+                    break
 
-        for y in range(h - 1, 0, -1):
-            x = int(w / 2)
-            r, g, b = minimap[y][x]
-            if r == 0 and g == 0 and b == 0:
-                bottom = y
-                break
+            for y in range(h - 1, 0, -1):
+                x = int(w / 2)
+                r, g, b = minimap[y][x]
+                if r < 10 and g < 10 and b < 10:
+                    bottom = y
+                    break
+
+            minimap_crop = (top, bottom, left, right)
+        else:
+            top, bottom, left, right = minimap_crop
 
         minimap = minimap[top - 1:bottom + 1, left - 1:right + 1]
 
         h, w, c = minimap.shape
         if h == 0 or w == 0:
             print('Could not detect game')
+            minimap_crop = None  # Reset crop detection
             continue
-        minimap = cv2.resize(minimap, dsize=(256, 256), interpolation=cv2.INTER_LINEAR)
 
-        orig_minimap = minimap
-        minimap = minimap.copy().transpose((2, 0, 1)).astype(np.float)
-        minimap /= 255
+        # Use INTER_NEAREST for faster resizing
+        minimap = cv2.resize(minimap, dsize=(256, 256), interpolation=cv2.INTER_NEAREST)
 
-        img = torch.from_numpy(minimap)
-        img = img.type(torch.float32)
+        orig_minimap = minimap.copy()
+        
+        # Convert to tensor more efficiently
+        minimap_tensor = minimap.transpose((2, 0, 1)).astype(np.float32) / 255.0
+        img = torch.from_numpy(minimap_tensor).type(torch.float32)
 
         with torch.no_grad():
             img = img.to(device)
             predictions = model([img])
-            img = img.cpu().numpy()
 
             for prediction in predictions:
-                boxes = prediction['boxes'].cpu().numpy().tolist()
-                labels = prediction['labels'].cpu().numpy().tolist()
-                scores = prediction['scores'].cpu().numpy().tolist()
-                output = ''
+                boxes = prediction['boxes'].cpu().numpy()
+                labels = prediction['labels'].cpu().numpy()
+                scores = prediction['scores'].cpu().numpy()
 
-                img = img.transpose((1, 2, 0))
+                # Create display image (BGR for OpenCV)
+                img_show = orig_minimap.copy()
+
                 for label, box, score in zip(labels, boxes, scores):
                     if score > score_threshold:
-                        x1, y1, x2, y2 = box
-                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                        label = image_drawer.id_to_champion[label]
+                        x1, y1, x2, y2 = map(int, box)
+                        label_name = image_drawer.id_to_champion[label]
 
-                        img = img.copy()
-                        img = cv2.rectangle(img, (x1, y1), (x2, y2), (1.0, 1.0, 1.0), 1)
-
-                        text = '{} {:.2f}'.format(label, score)
-                        output += text + '\n'
+                        text = '{} {:.2f}'.format(label_name, score)
                         print(text)
 
-                        color = champion_to_color[label]
-                        img = draw_box(img, label, x1, y1, x2, y2, color)
+                        color = champion_to_color[label_name]
+                        img_show = draw_box(img_show, label_name, x1, y1, x2, y2, color, thickness=2)
 
                 print('\n')
 
-                img = img.transpose((2, 0, 1))
+                # Display using OpenCV (much faster than matplotlib)
+                combined = np.hstack([orig_minimap, img_show])
+                cv2.imshow('Detection - Original | Detected', combined)
 
-                img = torch.from_numpy(img)
-                pil_img = transforms.ToPILImage()(img)
+                # Press 'q' to quit
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    cv2.destroyAllWindows()
+                    return
 
-                ax1.imshow(orig_minimap, cmap='gray', interpolation='none')
-                ax2.imshow(pil_img, cmap='gray', interpolation='none')
-
-                fig.tight_layout()
-                plt.draw()
-                plt.pause(1.0)
-                for i, ax in enumerate(fig.axes):
-                    ax.clear()
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

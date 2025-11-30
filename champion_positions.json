@@ -1,0 +1,204 @@
+{
+  "timestamp": "2025-11-29T16:03:42.635587",
+  "frame": 253,
+  "champions": [
+    {
+      "label": "champion",
+      "confidence": 0.935,
+      "bbox": {
+        "x1": 473,
+        "y1": 36,
+        "x2": 503,
+        "y2": 64
+      },
+      "center": {
+        "x": 488,
+        "y": 50
+      },
+      "normalized_center": {
+        "x": 0.762,
+        "y": 0.078
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.92,
+      "bbox": {
+        "x1": 574,
+        "y1": 137,
+        "x2": 605,
+        "y2": 168
+      },
+      "center": {
+        "x": 589,
+        "y": 152
+      },
+      "normalized_center": {
+        "x": 0.92,
+        "y": 0.237
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.842,
+      "bbox": {
+        "x1": 265,
+        "y1": 282,
+        "x2": 317,
+        "y2": 337
+      },
+      "center": {
+        "x": 291,
+        "y": 309
+      },
+      "normalized_center": {
+        "x": 0.455,
+        "y": 0.483
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.841,
+      "bbox": {
+        "x1": 0,
+        "y1": 578,
+        "x2": 19,
+        "y2": 611
+      },
+      "center": {
+        "x": 9,
+        "y": 594
+      },
+      "normalized_center": {
+        "x": 0.014,
+        "y": 0.928
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.833,
+      "bbox": {
+        "x1": 343,
+        "y1": 280,
+        "x2": 375,
+        "y2": 329
+      },
+      "center": {
+        "x": 359,
+        "y": 304
+      },
+      "normalized_center": {
+        "x": 0.561,
+        "y": 0.475
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.831,
+      "bbox": {
+        "x1": 188,
+        "y1": 164,
+        "x2": 237,
+        "y2": 214
+      },
+      "center": {
+        "x": 212,
+        "y": 189
+      },
+      "normalized_center": {
+        "x": 0.331,
+        "y": 0.295
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.809,
+      "bbox": {
+        "x1": 33,
+        "y1": 473,
+        "x2": 64,
+        "y2": 503
+      },
+      "center": {
+        "x": 48,
+        "y": 488
+      },
+      "normalized_center": {
+        "x": 0.075,
+        "y": 0.762
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.786,
+      "bbox": {
+        "x1": 535,
+        "y1": 57,
+        "x2": 566,
+        "y2": 94
+      },
+      "center": {
+        "x": 550,
+        "y": 75
+      },
+      "normalized_center": {
+        "x": 0.859,
+        "y": 0.117
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.774,
+      "bbox": {
+        "x1": 335,
+        "y1": 42,
+        "x2": 353,
+        "y2": 79
+      },
+      "center": {
+        "x": 344,
+        "y": 60
+      },
+      "normalized_center": {
+        "x": 0.537,
+        "y": 0.094
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.758,
+      "bbox": {
+        "x1": 134,
+        "y1": 575,
+        "x2": 166,
+        "y2": 605
+      },
+      "center": {
+        "x": 150,
+        "y": 590
+      },
+      "normalized_center": {
+        "x": 0.234,
+        "y": 0.922
+      }
+    },
+    {
+      "label": "champion",
+      "confidence": 0.756,
+      "bbox": {
+        "x1": 485,
+        "y1": 122,
+        "x2": 517,
+        "y2": 152
+      },
+      "center": {
+        "x": 501,
+        "y": 137
+      },
+      "normalized_center": {
+        "x": 0.783,
+        "y": 0.214
+      }
+    }
+  ]
+}

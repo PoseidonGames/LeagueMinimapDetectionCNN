@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>League Gank Detector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a1428 0%, #1a2332 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            color: #00d4ff;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .status {
+            font-size: 1.2rem;
+            color: #aaa;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .map-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            border: 2px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .map-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: linear-gradient(135deg, #1a3a52 0%, #0f2537 100%);
+            border-radius: 10px;
+            border: 3px solid #00d4ff;
+            overflow: hidden;
+        }
+
+        /* Diagonal lane regions - CORRECTED */
+        .map-region {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        /* Top lane: top-left triangle (bigger) */
+        .map-region.top {
+            clip-path: polygon(0 0, 65% 0, 0 65%);
+            background: rgba(0, 150, 255, 0.1);
+        }
+
+        /* Mid lane: diagonal strip from BOTTOM-LEFT to TOP-RIGHT */
+        .map-region.mid {
+            clip-path: polygon(0 65%, 65% 0, 100% 0, 100% 35%, 35% 100%, 0 100%);
+            background: rgba(255, 0, 0, 0.1);
+        }
+
+        /* Bot lane: bottom-right triangle (bigger) */
+        .map-region.bot {
+            clip-path: polygon(100% 35%, 100% 100%, 35% 100%);
+            background: rgba(255, 150, 0, 0.1);
+        }
+
+        .map-region.gank-warning {
+            animation: pulse 1s infinite;
+        }
+
+        .map-region.top.gank-warning {
+            background: rgba(0, 150, 255, 0.5);
+        }
+
+        .map-region.mid.gank-warning {
+            background: rgba(255, 0, 0, 0.5);
+        }
+
+        .map-region.bot.gank-warning {
+            background: rgba(255, 150, 0, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .region-label {
+            position: absolute;
+            font-size: 1.8rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .region-label.top {
+            top: 15%;
+            left: 15%;
+            color: #00d4ff;
+        }
+
+        .region-label.mid {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff4444;
+        }
+
+        .region-label.bot {
+            bottom: 15%;
+            right: 15%;
+            color: #ff9900;
+        }
+
+        .champion-dot {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #00ff00;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            animation: appear 0.3s ease;
+            z-index: 20;
+        }
+
+        @keyframes appear {
+            from { transform: translate(-50%, -50%) scale(0); }
+            to { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .warnings-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            border: 2px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .warnings-section h2 {
+            color: #00d4ff;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .warning-item {
+            background: rgba(255, 0, 0, 0.2);
+            border-left: 4px solid #ff0000;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .warning-item.safe {
+            background: rgba(0, 255, 0, 0.1);
+            border-left-color: #00ff00;
+        }
+
+        .warning-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .warning-details {
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: rgba(0, 212, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #888;
+            padding: 40px;
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚔️ League Gank Detector</h1>
+            <div class="status" id="status">Waiting for data...</div>
+        </div>
+
+        <div class="main-content">
+            <div class="map-section">
+                <h2 style="color: #00d4ff; margin-bottom: 20px;">Minimap</h2>
+                <div class="map-container" id="map">
+                    <div class="map-region top" id="region-top"></div>
+                    <div class="map-region mid" id="region-mid"></div>
+                    <div class="map-region bot" id="region-bot"></div>
+                    <div class="region-label top">TOP</div>
+                    <div class="region-label mid">MID</div>
+                    <div class="region-label bot">BOT</div>
+                </div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-top">0</div>
+                        <div class="stat-label">Top Lane</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-mid">0</div>
+                        <div class="stat-label">Mid Lane</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-bot">0</div>
+                        <div class="stat-label">Bot Lane</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="warnings-section">
+                <h2>🚨 Warnings</h2>
+                <div id="warnings">
+                    <div class="no-data">No detections yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <script>
+        const API_URL = 'champion_positions.json';
+        let lastUpdate = null;
+        let lastWarningState = null;  // Track previous warning state to prevent blinking
+
+        // Blacklist of false positive positions (towers/structures)
+        const BLACKLIST_POSITIONS = [
+            {x: 590, y: 152},
+            {x: 488, y: 53},
+            {x: 488, y: 50},
+            {x: 590, y: 152},
+            {x: 550, y: 75},
+            {x: 43, y: 192},
+            {x: 510, y: 136},
+            {x: 150, y: 590},
+            {x: 503, y: 55},
+            {x: 212, y: 189},
+            {x: 62, y: 352},
+            {x: 601, y: 449},
+            {x: 460, y: 51},
+            {x: 48, y: 488},
+            {x: 136, y: 502},
+            {x: 431, y: 452},
+            {x: 574, y: 69},
+            {x: 503, y: 136},
+            {x: 591, y: 137},
+            {x: 343, y: 61},
+            {x: 387, y: 274},
+            {x: 9, y: 595},
+            {x: 186, y: 42},
+            {x: 599, y: 16},
+        ];
+
+        const POSITION_TOLERANCE = 10; // pixels tolerance for matching
+
+        function isBlacklisted(centerX, centerY) {
+            for (const pos of BLACKLIST_POSITIONS) {
+                const distance = Math.sqrt((centerX - pos.x) ** 2 + (centerY - pos.y) ** 2);
+                if (distance < POSITION_TOLERANCE) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Region detection matching the CSS clip-paths EXACTLY
+        function getRegion(x, y) {
+            // x and y are normalized 0-1
+            
+            // Helper function: point-in-polygon using ray-casting algorithm
+            function pointInPolygon(x, y, polygon) {
+                let inside = false;
+                for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                    const xi = polygon[i][0], yi = polygon[i][1];
+                    const xj = polygon[j][0], yj = polygon[j][1];
+                    
+                    const intersect = ((yi > y) !== (yj > y))
+                        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+                return inside;
+            }
+            
+            // Define regions matching CSS clip-paths EXACTLY
+            const topRegion = [
+                [0, 0],      // top-left corner
+                [0.65, 0],   // top edge
+                [0, 0.65]    // left edge
+            ];
+            
+            const midRegion = [
+                [0, 0.65],    // left edge (bottom)
+                [0.65, 0],    // top edge (right)
+                [1.0, 0],     // top-right corner
+                [1.0, 0.35],  // right edge (top)
+                [0.35, 1.0],  // bottom edge (left)
+                [0, 1.0]      // bottom-left corner
+            ];
+            
+            const botRegion = [
+                [1.0, 0.35],  // right edge (top)
+                [1.0, 1.0],   // bottom-right corner
+                [0.35, 1.0]   // bottom edge (left)
+            ];
+            
+            // Check regions in priority order
+            if (pointInPolygon(x, y, topRegion)) return 'top';
+            if (pointInPolygon(x, y, botRegion)) return 'bot';
+            return 'mid';  // Everything else is mid
+        }
+
+        function updateMap(data) {
+            const map = document.getElementById('map');
+            const warnings = document.getElementById('warnings');
+            const status = document.getElementById('status');
+
+            // Clear previous champion dots
+            document.querySelectorAll('.champion-dot').forEach(dot => dot.remove());
+
+            // Reset regions
+            document.querySelectorAll('.map-region').forEach(region => {
+                region.classList.remove('gank-warning');
+            });
+
+            if (!data.champions || data.champions.length === 0) {
+                // Only update if state changed
+                if (lastWarningState !== 'no-champions') {
+                    warnings.innerHTML = '<div class="no-data">No champions detected</div>';
+                    status.textContent = 'No champions detected';
+                    lastWarningState = 'no-champions';
+                }
+                document.getElementById('stat-top').textContent = '0';
+                document.getElementById('stat-mid').textContent = '0';
+                document.getElementById('stat-bot').textContent = '0';
+                return;
+            }
+
+            // Count champions per region
+            const regionCounts = { top: 0, mid: 0, bot: 0 };
+            const regionChampions = { top: [], mid: [], bot: [] };
+
+            data.champions.forEach(champ => {
+                // Get pixel coordinates for blacklist checking
+                const pixelX = champ.center?.x || champ.bbox?.center_x || 0;
+                const pixelY = champ.center?.y || champ.bbox?.center_y || 0;
+                
+                // Skip blacklisted positions
+                if (isBlacklisted(pixelX, pixelY)) {
+                    console.log(`Filtered blacklisted position: (${pixelX}, ${pixelY})`);
+                    return; // Skip this champion
+                }
+
+                const x = champ.normalized_center.x;
+                const y = champ.normalized_center.y;
+                const region = getRegion(x, y);
+                
+                regionCounts[region]++;
+                regionChampions[region].push(champ);
+
+                // Add champion dot to map
+                const dot = document.createElement('div');
+                dot.className = 'champion-dot';
+                dot.style.left = `${x * 100}%`;
+                dot.style.top = `${y * 100}%`;
+                dot.title = `${champ.label} (${(champ.confidence * 100).toFixed(1)}%) - ${region.toUpperCase()}`;
+                map.appendChild(dot);
+            });
+
+            // Update stats
+            document.getElementById('stat-top').textContent = regionCounts.top;
+            document.getElementById('stat-mid').textContent = regionCounts.mid;
+            document.getElementById('stat-bot').textContent = regionCounts.bot;
+
+            // Check for ganks
+            const gankWarnings = [];
+
+            if (regionCounts.top >= 3) {
+                document.getElementById('region-top').classList.add('gank-warning');
+                gankWarnings.push({
+                    lane: 'TOP',
+                    count: regionCounts.top,
+                    message: `${regionCounts.top} champions detected in top lane!`,
+                    color: '#00d4ff'
+                });
+            }
+
+            if (regionCounts.mid >= 3) {
+                document.getElementById('region-mid').classList.add('gank-warning');
+                gankWarnings.push({
+                    lane: 'MID',
+                    count: regionCounts.mid,
+                    message: `${regionCounts.mid} champions detected in mid lane!`,
+                    color: '#ff4444'
+                });
+            }
+
+            if (regionCounts.bot >= 5) {
+                document.getElementById('region-bot').classList.add('gank-warning');
+                gankWarnings.push({
+                    lane: 'BOT',
+                    count: regionCounts.bot,
+                    message: `${regionCounts.bot} champions detected in bot lane!`,
+                    color: '#ff9900'
+                });
+            }
+
+            // Create warning state hash to detect changes
+            const warningStateHash = gankWarnings.map(w => `${w.lane}-${w.count}`).join('|') || 'clear';
+            const totalChampions = regionCounts.top + regionCounts.mid + regionCounts.bot;
+
+            // Only update warnings if state changed (prevents blinking)
+            if (lastWarningState !== warningStateHash) {
+                if (gankWarnings.length > 0) {
+                    warnings.innerHTML = gankWarnings.map(warning => `
+                        <div class="warning-item">
+                            <div class="warning-title">⚠️ GANK WARNING - ${warning.lane}</div>
+                            <div class="warning-details">${warning.message}</div>
+                        </div>
+                    `).join('');
+                    status.textContent = `⚠️ ${gankWarnings.length} GANK WARNING(S) ACTIVE`;
+                    status.style.color = '#ff0000';
+                } else {
+                    warnings.innerHTML = `
+                        <div class="warning-item safe">
+                            <div class="warning-title">✅ All Clear</div>
+                            <div class="warning-details">No gank threats detected. ${totalChampions} champions tracked.</div>
+                        </div>
+                    `;
+                    status.textContent = `✅ Monitoring - ${totalChampions} champions detected`;
+                    status.style.color = '#00ff00';
+                }
+                lastWarningState = warningStateHash;
+            }
+
+            lastUpdate = new Date().toLocaleTimeString();
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL + '?t=' + Date.now());
+                const data = await response.json();
+                updateMap(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('status').textContent = 'Error loading data';
+            }
+        }
+
+        // Update every 500ms
+        setInterval(fetchData, 500);
+        fetchData();
+    </script>
+
+</body>
+</html>
